@@ -61,7 +61,9 @@ type FaceVerificationResponse = {
   message?: string;
 };
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8100";
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://127.0.0.1:8100";
+
 
 function getTodayDateInputValue() {
   const now = new Date();
