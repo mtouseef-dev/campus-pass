@@ -2,8 +2,9 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "services": {
     "app": {
-      "root": ".",
-      "framework": "fastapi"
+      "root": "backend",
+      "framework": "fastapi",
+      "entrypoint": "main:app"
     },
     "frontend": {
       "root": "frontend",
@@ -12,9 +13,39 @@
   },
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/auth/(.*)",
       "destination": {
         "service": "app"
+      }
+    },
+    {
+      "source": "/attendance/(.*)",
+      "destination": {
+        "service": "app"
+      }
+    },
+    {
+      "source": "/health",
+      "destination": {
+        "service": "app"
+      }
+    },
+    {
+      "source": "/docs",
+      "destination": {
+        "service": "app"
+      }
+    },
+    {
+      "source": "/openapi.json",
+      "destination": {
+        "service": "app"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "frontend"
       }
     }
   ]
