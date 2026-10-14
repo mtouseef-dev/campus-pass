@@ -73,66 +73,160 @@ function getTodayDateInputValue() {
   return localDate.toISOString().slice(0, 10);
 }
 
+
 function getCurrentLocation(): Promise<GPSLocation> {
   return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error("Your browser does not support location services."));
+    if (!window.isSecureContext) {
+      reject(
+        new Error(
+          "Location requires a secure HTTPS connection. Reopen CampusPass using https://campuspass-ignite.vercel.app."
+        )
+      );
+      return;
+    }
+
+    if (!("geolocation" in navigator)) {
+      reject(
+        new Error(
+          "Location is unavailable in this browser. Open CampusPass in the latest version of Chrome."
+        )
+      );
       return;
     }
 
     let watchId: number | null = null;
     let finished = false;
     let best: GPSLocation | null = null;
-    const startedAt = Date.now();
-    const timeoutMs = 20000;
+    let timer = 0;
+
+    const timeoutMs = 25000;
     const targetAccuracyM = 50;
 
-    const finish = (location?: GPSLocation, error?: Error) => {
+    const finish = (
+      location?: GPSLocation,
+      error?: Error
+    ) => {
       if (finished) return;
       finished = true;
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+
       window.clearTimeout(timer);
-      if (location) resolve(location);
-      else reject(error ?? new Error("Unable to get your location. Please try again."));
+
+      if (location) {
+        resolve(location);
+      } else {
+        reject(
+          error ??
+            new Error(
+              "Unable to get your location. Enable location services and try again."
+            )
+        );
+      }
     };
 
-    const timer = window.setTimeout(() => {
+    timer = window.setTimeout(() => {
       if (best) {
-        // Send the best measured reading; the backend still enforces its own accuracy limit.
         finish(best);
       } else {
-        finish(undefined, new Error("No GPS reading received within 20 seconds. Check browser location permission and try again."));
+        finish(
+          undefined,
+          new Error(
+            "No GPS reading was received within 25 seconds. Turn on your phone's Location setting and Chrome location permission, then try again."
+          )
+        );
       }
     }, timeoutMs);
 
-    watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        const candidate: GPSLocation = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy_m: position.coords.accuracy,
-        };
-        if (!best || candidate.accuracy_m < best.accuracy_m) best = candidate;
-        // Stop early once a high-quality reading is available.
-        if (candidate.accuracy_m <= targetAccuracyM) finish(candidate);
-        // Keep collecting readings for the full window when accuracy is poor.
-        if (Date.now() - startedAt >= timeoutMs && best) finish(best);
-      },
-      (error) => {
-        if (error.code === error.PERMISSION_DENIED) {
-          finish(undefined, new Error("Location permission denied. Allow location access for this site."));
-        } else if (error.code === error.TIMEOUT) {
-          if (best) finish(best);
-          else finish(undefined, new Error("Getting your location took too long. Try again with location services enabled."));
-        } else {
-          if (best) finish(best);
-          else finish(undefined, new Error("Unable to get a GPS reading. Try outdoors and enable device location services."));
+    try {
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const candidate: GPSLocation = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy_m: position.coords.accuracy,
+          };
+
+          if (
+            !Number.isFinite(candidate.latitude) ||
+            !Number.isFinite(candidate.longitude) ||
+            !Number.isFinite(candidate.accuracy_m) ||
+            candidate.latitude < -90 ||
+            candidate.latitude > 90 ||
+            candidate.longitude < -180 ||
+            candidate.longitude > 180 ||
+            candidate.accuracy_m <= 0
+          ) {
+            return;
+          }
+
+          if (
+            !best ||
+            candidate.accuracy_m < best.accuracy_m
+          ) {
+            best = candidate;
+          }
+
+          if (candidate.accuracy_m <= targetAccuracyM) {
+            finish(candidate);
+          }
+        },
+        (error) => {
+          if (error.code === error.PERMISSION_DENIED) {
+            finish(
+              undefined,
+              new Error(
+                "Chrome or Android is blocking location access. Open Chrome Settings > Site settings > Location, allow sites to request location, and enable Location permission for Chrome in Android Settings. Then reload CampusPass."
+              )
+            );
+          } else if (error.code === error.POSITION_UNAVAILABLE) {
+            finish(
+              best ?? undefined,
+              best
+                ? undefined
+                : new Error(
+                    "Your phone could not determine your location. Turn on Location, enable precise location for Chrome, and try again outdoors."
+                  )
+            );
+          } else if (error.code === error.TIMEOUT) {
+            finish(
+              best ?? undefined,
+              best
+                ? undefined
+                : new Error(
+                    "Getting your location timed out. Turn on Location and try again in an open area."
+                  )
+            );
+          } else {
+            finish(
+              undefined,
+              new Error(
+                "An unexpected location error occurred. Reload CampusPass and try again."
+              )
+            );
+          }
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: timeoutMs,
+          maximumAge: 0,
         }
-      },
-      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 }
-    );
+      );
+    } catch (error) {
+      finish(
+        undefined,
+        new Error(
+          error instanceof Error
+            ? `Could not start GPS: ${error.message}`
+            : "Could not start GPS. Check your browser and device location settings."
+        )
+      );
+    }
   });
 }
+
 
 function App() {
   const [screen, setScreen] = useState<Screen>("login");
