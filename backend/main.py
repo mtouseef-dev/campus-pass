@@ -425,9 +425,9 @@ app = FastAPI(title="CampusPass API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://campuspass-ignite.vercel.app/",
         "http://localhost:5180",
         "http://127.0.0.1:5180",
-        "https://campuspass-ignite.vercel.app/",
     ],
     allow_credentials=True,
     allow_methods=["*"],
