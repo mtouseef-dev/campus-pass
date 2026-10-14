@@ -421,16 +421,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CampusPass API", lifespan=lifespan)
 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5180",
         "http://127.0.0.1:5180",
+        "https://campuspass-ignite.vercel.app/",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 # ---------------- BASIC ROUTES ----------------
