@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import "./App.css";
 
@@ -62,8 +61,8 @@ type FaceVerificationResponse = {
 };
 
 const API_URL =
-  import.meta.env.VITE_API_URL || "http://127.0.0.1:8100";
-
+  import.meta.env.VITE_API_URL ||
+  "https://campuspass-ignite.onrender.com";
 
 function getTodayDateInputValue() {
   const now = new Date();
@@ -73,13 +72,19 @@ function getTodayDateInputValue() {
   return localDate.toISOString().slice(0, 10);
 }
 
-
+/**
+ * Requests the user's current GPS location.
+ *
+ * The browser may still block the request if its site permission,
+ * Android location service, or Chrome app permission is disabled.
+ * This function cannot override those operating-system settings.
+ */
 function getCurrentLocation(): Promise<GPSLocation> {
   return new Promise((resolve, reject) => {
     if (!window.isSecureContext) {
       reject(
         new Error(
-          "Location requires a secure HTTPS connection. Reopen CampusPass using https://campuspass-ignite.vercel.app."
+          "Location requires HTTPS. Open https://campuspass-ignite.vercel.app in Chrome."
         )
       );
       return;
@@ -88,7 +93,7 @@ function getCurrentLocation(): Promise<GPSLocation> {
     if (!("geolocation" in navigator)) {
       reject(
         new Error(
-          "Location is unavailable in this browser. Open CampusPass in the latest version of Chrome."
+          "Location is not supported by this browser. Please use an updated version of Chrome."
         )
       );
       return;
@@ -97,7 +102,7 @@ function getCurrentLocation(): Promise<GPSLocation> {
     let watchId: number | null = null;
     let finished = false;
     let best: GPSLocation | null = null;
-    let timer = 0;
+    let timer: number | undefined;
 
     const timeoutMs = 25000;
     const targetAccuracyM = 50;
@@ -111,9 +116,12 @@ function getCurrentLocation(): Promise<GPSLocation> {
 
       if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId);
+        watchId = null;
       }
 
-      window.clearTimeout(timer);
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
 
       if (location) {
         resolve(location);
@@ -127,6 +135,53 @@ function getCurrentLocation(): Promise<GPSLocation> {
       }
     };
 
+    const handleLocationError = (error: GeolocationPositionError) => {
+      if (error.code === error.PERMISSION_DENIED) {
+        finish(
+          undefined,
+          new Error(
+            "Location access is blocked. In Android Settings, open Apps > Chrome > Permissions > Location and allow location access. Then open Chrome Settings > Site settings > Location, allow location requests, and reload CampusPass."
+          )
+        );
+        return;
+      }
+
+      if (error.code === error.POSITION_UNAVAILABLE) {
+        if (best && best.accuracy_m <= targetAccuracyM) {
+          finish(best);
+        } else {
+          finish(
+            undefined,
+            new Error(
+              "Your phone could not determine your location accurately. Turn on Android Location, enable precise location for Chrome, and try again outdoors."
+            )
+          );
+        }
+        return;
+      }
+
+      if (error.code === error.TIMEOUT) {
+        if (best) {
+          finish(best);
+        } else {
+          finish(
+            undefined,
+            new Error(
+              "Getting your location timed out. Turn on Location and try again in an open area."
+            )
+          );
+        }
+        return;
+      }
+
+      finish(
+        undefined,
+        new Error(
+          "An unexpected location error occurred. Reload CampusPass and try again."
+        )
+      );
+    };
+
     timer = window.setTimeout(() => {
       if (best) {
         finish(best);
@@ -134,7 +189,7 @@ function getCurrentLocation(): Promise<GPSLocation> {
         finish(
           undefined,
           new Error(
-            "No GPS reading was received within 25 seconds. Turn on your phone's Location setting and Chrome location permission, then try again."
+            "No GPS reading was received within 25 seconds. Enable your phone's Location setting and Chrome location permission, then try again."
           )
         );
       }
@@ -173,41 +228,7 @@ function getCurrentLocation(): Promise<GPSLocation> {
             finish(candidate);
           }
         },
-        (error) => {
-          if (error.code === error.PERMISSION_DENIED) {
-            finish(
-              undefined,
-              new Error(
-                "Chrome or Android is blocking location access. Open Chrome Settings > Site settings > Location, allow sites to request location, and enable Location permission for Chrome in Android Settings. Then reload CampusPass."
-              )
-            );
-          } else if (error.code === error.POSITION_UNAVAILABLE) {
-            finish(
-              best ?? undefined,
-              best
-                ? undefined
-                : new Error(
-                    "Your phone could not determine your location. Turn on Location, enable precise location for Chrome, and try again outdoors."
-                  )
-            );
-          } else if (error.code === error.TIMEOUT) {
-            finish(
-              best ?? undefined,
-              best
-                ? undefined
-                : new Error(
-                    "Getting your location timed out. Turn on Location and try again in an open area."
-                  )
-            );
-          } else {
-            finish(
-              undefined,
-              new Error(
-                "An unexpected location error occurred. Reload CampusPass and try again."
-              )
-            );
-          }
-        },
+        handleLocationError,
         {
           enableHighAccuracy: true,
           timeout: timeoutMs,
@@ -227,7 +248,6 @@ function getCurrentLocation(): Promise<GPSLocation> {
   });
 }
 
-
 function App() {
   const [screen, setScreen] = useState<Screen>("login");
   const [adminSection, setAdminSection] =
@@ -240,7 +260,6 @@ function App() {
   const [apiStatus, setApiStatus] = useState("Checking...");
   const [accessToken, setAccessToken] = useState("");
 
-  // Staff attendance
   const [attendanceRecords, setAttendanceRecords] = useState<
     AttendanceRecord[]
   >([]);
@@ -250,18 +269,15 @@ function App() {
   const [pendingAttendanceAction, setPendingAttendanceAction] =
     useState<AttendanceAction | null>(null);
 
-  // Face-verification proof
   const [faceProof, setFaceProof] = useState("");
   const [faceProofAction, setFaceProofAction] =
     useState<AttendanceAction | null>(null);
 
-  // Admin dashboard
   const [adminData, setAdminData] =
     useState<AdminDashboardData | null>(null);
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminError, setAdminError] = useState("");
 
-  // Attendance history
   const [historyDate, setHistoryDate] = useState(
     getTodayDateInputValue()
   );
@@ -273,7 +289,6 @@ function App() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
 
-  // Staff management
   const [staffList, setStaffList] = useState<StaffAccount[]>([]);
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffError, setStaffError] = useState("");
@@ -287,7 +302,6 @@ function App() {
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Face enrollment
   const [enrollingStaffId, setEnrollingStaffId] =
     useState<string | null>(null);
   const [enrollCameraError, setEnrollCameraError] = useState("");
@@ -314,7 +328,6 @@ function App() {
     void checkBackend();
   }, []);
 
-  // Staff attendance camera
   useEffect(() => {
     if (screen !== "verify") return;
 
@@ -325,16 +338,17 @@ function App() {
     async function startCamera() {
       if (!navigator.mediaDevices?.getUserMedia) {
         setCameraError(
-          "Camera access is unavailable. Open CampusPass using localhost or 127.0.0.1."
+          "Camera access is unavailable. Open CampusPass in Chrome using HTTPS."
         );
         return;
       }
 
       try {
-        const cameraStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user" },
-          audio: false,
-        });
+        const cameraStream =
+          await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" },
+            audio: false,
+          });
 
         if (cancelled) {
           cameraStream.getTracks().forEach((track) => track.stop());
@@ -374,7 +388,6 @@ function App() {
     };
   }, [screen]);
 
-  // Face-enrollment camera lifecycle
   useEffect(() => {
     if (!enrollingStaffId || screen !== "admin") return;
 
@@ -387,16 +400,17 @@ function App() {
 
       if (!navigator.mediaDevices?.getUserMedia) {
         setEnrollCameraError(
-          "Camera access is unavailable. Open CampusPass using localhost or 127.0.0.1."
+          "Camera access is unavailable. Open CampusPass using HTTPS."
         );
         return;
       }
 
       try {
-        const cameraStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user" },
-          audio: false,
-        });
+        const cameraStream =
+          await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" },
+            audio: false,
+          });
 
         if (cancelled) {
           cameraStream.getTracks().forEach((track) => track.stop());
@@ -631,7 +645,7 @@ function App() {
     } catch (error) {
       console.error("CampusPass login error:", error);
       setMessage(
-        "Cannot connect to the backend. Check that FastAPI is running."
+        "Cannot connect to the backend. Check the backend URL and connection."
       );
     }
   }
@@ -682,7 +696,9 @@ function App() {
 
     const responseText = await response.text();
 
-    let data: Partial<FaceVerificationResponse> & { detail?: string };
+    let data: Partial<FaceVerificationResponse> & {
+      detail?: string;
+    };
 
     try {
       data = responseText ? JSON.parse(responseText) : {};
@@ -712,9 +728,17 @@ function App() {
 
     setFaceProof(data.proof_id);
     setFaceProofAction(action);
+
     return data.proof_id;
   }
 
+  /**
+   * Updated flow:
+   * 1. Request GPS immediately when the user confirms attendance.
+   * 2. Verify the live camera image.
+   * 3. Send the GPS coordinates and face proof to the existing backend.
+   * 4. Let the backend enforce its own GPS accuracy and campus geofence.
+   */
   async function handleAttendance(action: AttendanceAction) {
     if (!accessToken) {
       setAttendanceMessage("Please log in again to continue.");
@@ -730,12 +754,16 @@ function App() {
     let proof = faceProofAction === action ? faceProof : "";
 
     try {
+      // Request location before waiting for the face-verification API.
+      setAttendanceMessage("Requesting GPS location...");
+      const location = await getCurrentLocation();
+
+      // Preserve the existing face-verification requirement.
       if (!proof) {
         proof = await verifyFaceForAction(action);
       }
 
-      setAttendanceMessage("Face verified. Getting your GPS location...");
-      const location = await getCurrentLocation();
+      setAttendanceMessage("Face verified. Submitting attendance...");
 
       const response = await fetch(`${API_URL}/attendance/${action}`, {
         method: "POST",
@@ -743,7 +771,10 @@ function App() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ ...location, face_proof: proof }),
+        body: JSON.stringify({
+          ...location,
+          face_proof: proof,
+        }),
       });
 
       const responseText = await response.text();
@@ -1178,7 +1209,6 @@ function App() {
             }`}
           />
           <span className="api-status">API: {apiStatus}</span>
-
           <button
             className="outline-button"
             type="button"
@@ -1238,13 +1268,17 @@ function App() {
                 required
               />
 
-              {message && <p className="error-message" role="alert">{message}</p>}
+              {message && (
+                <p className="error-message" role="alert">{message}</p>
+              )}
 
               <button className="primary-button" type="submit">
                 Sign in <span>→</span>
               </button>
 
-              <p className="demo-note">Use your registered CampusPass account.</p>
+              <p className="demo-note">
+                Use your registered CampusPass account.
+              </p>
             </form>
           </section>
         </main>
@@ -1253,14 +1287,19 @@ function App() {
       {screen === "verify" && (
         <main className="main-content">
           <section className="workflow-card">
-            <button className="text-button" type="button" onClick={handleLogout}>
+            <button
+              className="text-button"
+              type="button"
+              onClick={handleLogout}
+            >
               ← Log out
             </button>
 
             <span className="eyebrow">STAFF ATTENDANCE</span>
             <h1>Welcome, {staffId}</h1>
             <p className="muted">
-              Your face and campus location must be verified before attendance is recorded.
+              Your face and campus location must be verified before
+              attendance is recorded.
             </p>
 
             <div className="camera-placeholder">
@@ -1282,10 +1321,17 @@ function App() {
                 </div>
               ) : (
                 <>
-                  <video ref={videoRef} autoPlay playsInline muted aria-label="Live camera preview" />
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    aria-label="Live camera preview"
+                  />
                   <strong>Live camera preview</strong>
                   <p>
-                    Your camera image will be checked against your enrolled face profile when you confirm attendance.
+                    Your camera image will be checked against your enrolled
+                    face profile when you confirm attendance.
                   </p>
                 </>
               )}
@@ -1295,7 +1341,8 @@ function App() {
               <span className="eyebrow">FACE VERIFICATION</span>
               <h2>Look directly at the camera</h2>
               <p className="muted">
-                Keep your face clearly visible in good lighting. Face matching runs when you confirm check-in or check-out.
+                Keep your face clearly visible in good lighting. Face
+                matching runs when you confirm check-in or check-out.
               </p>
             </div>
 
@@ -1311,6 +1358,7 @@ function App() {
               >
                 {attendanceBusy ? "Please wait..." : "Check in"}
               </button>
+
               <button
                 className="outline-button"
                 type="button"
@@ -1325,13 +1373,17 @@ function App() {
             </div>
 
             {!attendanceBusy && !pendingAttendanceAction && (
-              <p className="muted">Ready to record attendance. Select Check in or Check out.</p>
+              <p className="muted">
+                Ready to record attendance. Select Check in or Check out.
+              </p>
             )}
 
             {attendanceMessage && (
               <div
                 className={`attendance-alert ${
-                  /outside the campus|not accurate|accuracy is too low|failed|unable|denied|too long|cannot connect|error|gps signal|could not|not enrolled|not ready|expired|rejected|must be/i.test(attendanceMessage)
+                  /outside the campus|not accurate|accuracy is too low|failed|unable|denied|too long|cannot connect|error|gps signal|could not|not enrolled|not ready|expired|rejected|must be|blocked|timed out|permission/i.test(
+                    attendanceMessage
+                  )
                     ? "alert-error"
                     : "alert-success"
                 }`}
@@ -1346,7 +1398,9 @@ function App() {
               <div className="admin-heading">
                 <div>
                   <h2>My attendance history</h2>
-                  <p className="muted">Records saved in the CampusPass database.</p>
+                  <p className="muted">
+                    Records saved in the CampusPass database.
+                  </p>
                 </div>
                 <button
                   className="outline-button"
@@ -1356,10 +1410,14 @@ function App() {
                     setAttendanceMessage("");
                     try {
                       await loadAttendance(accessToken);
-                      setAttendanceMessage("Attendance history refreshed.");
+                      setAttendanceMessage(
+                        "Attendance history refreshed."
+                      );
                     } catch (error) {
                       setAttendanceMessage(
-                        error instanceof Error ? error.message : "Could not refresh attendance."
+                        error instanceof Error
+                          ? error.message
+                          : "Could not refresh attendance."
                       );
                     }
                   }}
@@ -1371,22 +1429,34 @@ function App() {
               <div className="table-scroll">
                 <table>
                   <thead>
-                    <tr><th>Check-in</th><th>Check-out</th><th>Status</th></tr>
+                    <tr>
+                      <th>Check-in</th>
+                      <th>Check-out</th>
+                      <th>Status</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {attendanceRecords.length === 0 ? (
-                      <tr><td colSpan={3}>No attendance records found.</td></tr>
-                    ) : attendanceRecords.map((record, index) => (
-                      <tr key={record.id ?? index}>
-                        <td>{formatDateTime(record.check_in)}</td>
-                        <td>{formatDateTime(record.check_out)}</td>
-                        <td>
-                          <span className={`badge ${record.check_out ? "verified" : "gps-only"}`}>
-                            {record.check_out ? "Completed" : "Checked in"}
-                          </span>
-                        </td>
+                      <tr>
+                        <td colSpan={3}>No attendance records found.</td>
                       </tr>
-                    ))}
+                    ) : (
+                      attendanceRecords.map((record, index) => (
+                        <tr key={record.id ?? index}>
+                          <td>{formatDateTime(record.check_in)}</td>
+                          <td>{formatDateTime(record.check_out)}</td>
+                          <td>
+                            <span
+                              className={`badge ${
+                                record.check_out ? "verified" : "gps-only"
+                              }`}
+                            >
+                              {record.check_out ? "Completed" : "Checked in"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1414,33 +1484,60 @@ function App() {
             <nav className="sidebar-nav" aria-label="Admin navigation">
               <button
                 type="button"
-                className={`nav-item ${adminSection === "overview" ? "active" : ""}`}
-                onClick={() => { setAdminSection("overview"); setSidebarOpen(false); }}
+                className={`nav-item ${
+                  adminSection === "overview" ? "active" : ""
+                }`}
+                onClick={() => {
+                  setAdminSection("overview");
+                  setSidebarOpen(false);
+                }}
               >
-                <span className="nav-icon">▦</span><span>Dashboard</span>
+                <span className="nav-icon">▦</span>
+                <span>Dashboard</span>
               </button>
+
               <button
                 type="button"
-                className={`nav-item ${adminSection === "staff" ? "active" : ""}`}
-                onClick={() => { setAdminSection("staff"); setSidebarOpen(false); }}
+                className={`nav-item ${
+                  adminSection === "staff" ? "active" : ""
+                }`}
+                onClick={() => {
+                  setAdminSection("staff");
+                  setSidebarOpen(false);
+                }}
               >
-                <span className="nav-icon">♙</span><span>Staff management</span>
+                <span className="nav-icon">♙</span>
+                <span>Staff management</span>
               </button>
+
               <button
                 type="button"
-                className={`nav-item ${adminSection === "history" ? "active" : ""}`}
-                onClick={() => { setAdminSection("history"); setSidebarOpen(false); }}
+                className={`nav-item ${
+                  adminSection === "history" ? "active" : ""
+                }`}
+                onClick={() => {
+                  setAdminSection("history");
+                  setSidebarOpen(false);
+                }}
               >
-                <span className="nav-icon">▤</span><span>Attendance history</span>
+                <span className="nav-icon">▤</span>
+                <span>Attendance history</span>
               </button>
             </nav>
 
             <div className="sidebar-bottom">
               <div className="sidebar-help">
                 <span className="help-icon">i</span>
-                <div><strong>Need help?</strong><p>Contact your system administrator.</p></div>
+                <div>
+                  <strong>Need help?</strong>
+                  <p>Contact your system administrator.</p>
+                </div>
               </div>
-              <button type="button" className="sidebar-logout" onClick={handleLogout}>
+              <button
+                type="button"
+                className="sidebar-logout"
+                onClick={handleLogout}
+              >
                 <span>↪</span> Sign out
               </button>
             </div>
@@ -1452,9 +1549,17 @@ function App() {
                 <span className="breadcrumb">CampusPass / Admin</span>
                 <h1>{pageTitles[adminSection]}</h1>
               </div>
+
               <div className="admin-top-actions">
-                <span className={`connection-label ${apiStatus === "Connected" ? "connected" : "disconnected"}`}>
-                  <span className="status-dot" />{apiStatus}
+                <span
+                  className={`connection-label ${
+                    apiStatus === "Connected"
+                      ? "connected"
+                      : "disconnected"
+                  }`}
+                >
+                  <span className="status-dot" />
+                  {apiStatus}
                 </span>
                 <button
                   className="outline-button"
@@ -1466,55 +1571,186 @@ function App() {
                     void loadAttendanceHistory(accessToken);
                   }}
                 >
-                  {adminLoading || staffLoading ? "Refreshing..." : "↻ Refresh"}
+                  {adminLoading || staffLoading
+                    ? "Refreshing..."
+                    : "↻ Refresh"}
                 </button>
               </div>
             </div>
 
-            {adminError && <div className="error-message" role="alert">{adminError}</div>}
+            {adminError && (
+              <div className="error-message" role="alert">
+                {adminError}
+              </div>
+            )}
 
             {adminSection === "overview" && (
               <>
                 <div className="welcome-banner">
                   <div>
-                    <span className="eyebrow">YOUR CAMPUS AT A GLANCE</span>
+                    <span className="eyebrow">
+                      YOUR CAMPUS AT A GLANCE
+                    </span>
                     <h2>Good to see you, Admin.</h2>
-                    <p>Here is the latest attendance summary{adminData ? ` for ${adminData.date}` : ""}.</p>
+                    <p>
+                      Here is the latest attendance summary
+                      {adminData ? ` for ${adminData.date}` : ""}.
+                    </p>
                   </div>
                   <div className="welcome-mark">CP</div>
                 </div>
 
                 <div className="section-heading">
-                  <div><h2>Attendance overview</h2><p>Key workforce statistics for today.</p></div>
-                  <span className="date-chip">{adminData?.date || historyDate}</span>
+                  <div>
+                    <h2>Attendance overview</h2>
+                    <p>Key workforce statistics for today.</p>
+                  </div>
+                  <span className="date-chip">
+                    {adminData?.date || historyDate}
+                  </span>
                 </div>
 
                 <div className="stats-grid">
-                  <div className="stat-card stat-blue"><div className="stat-top"><span>Total staff</span><span className="stat-icon">♙</span></div><strong>{adminLoading && !adminData ? "—" : adminData?.total_staff ?? 0}</strong><small>All registered accounts</small></div>
-                  <div className="stat-card stat-green"><div className="stat-top"><span>Present today</span><span className="stat-icon">✓</span></div><strong>{adminLoading && !adminData ? "—" : adminData?.present_today ?? 0}</strong><small>Staff who checked in</small></div>
-                  <div className="stat-card stat-orange"><div className="stat-top"><span>Absent today</span><span className="stat-icon">◷</span></div><strong>{adminLoading && !adminData ? "—" : adminData?.absent_today ?? 0}</strong><small>Not yet marked present</small></div>
-                  <div className="stat-card stat-purple"><div className="stat-top"><span>Currently checked in</span><span className="stat-icon">↗</span></div><strong>{adminLoading && !adminData ? "—" : adminData?.currently_checked_in ?? 0}</strong><small>Open attendance sessions</small></div>
-                  <div className="stat-card stat-teal"><div className="stat-top"><span>Active staff</span><span className="stat-icon">●</span></div><strong>{adminLoading && !adminData ? "—" : adminData?.active_staff ?? 0}</strong><small>Accounts with access</small></div>
-                  <div className="stat-card stat-red"><div className="stat-top"><span>Inactive staff</span><span className="stat-icon">⊘</span></div><strong>{adminLoading && !adminData ? "—" : adminData?.inactive_staff ?? 0}</strong><small>Deactivated accounts</small></div>
+                  <div className="stat-card stat-blue">
+                    <div className="stat-top">
+                      <span>Total staff</span>
+                      <span className="stat-icon">♙</span>
+                    </div>
+                    <strong>
+                      {adminLoading && !adminData
+                        ? "—"
+                        : adminData?.total_staff ?? 0}
+                    </strong>
+                    <small>All registered accounts</small>
+                  </div>
+
+                  <div className="stat-card stat-green">
+                    <div className="stat-top">
+                      <span>Present today</span>
+                      <span className="stat-icon">✓</span>
+                    </div>
+                    <strong>
+                      {adminLoading && !adminData
+                        ? "—"
+                        : adminData?.present_today ?? 0}
+                    </strong>
+                    <small>Staff who checked in</small>
+                  </div>
+
+                  <div className="stat-card stat-orange">
+                    <div className="stat-top">
+                      <span>Absent today</span>
+                      <span className="stat-icon">◷</span>
+                    </div>
+                    <strong>
+                      {adminLoading && !adminData
+                        ? "—"
+                        : adminData?.absent_today ?? 0}
+                    </strong>
+                    <small>Not yet marked present</small>
+                  </div>
+
+                  <div className="stat-card stat-purple">
+                    <div className="stat-top">
+                      <span>Currently checked in</span>
+                      <span className="stat-icon">↗</span>
+                    </div>
+                    <strong>
+                      {adminLoading && !adminData
+                        ? "—"
+                        : adminData?.currently_checked_in ?? 0}
+                    </strong>
+                    <small>Open attendance sessions</small>
+                  </div>
+
+                  <div className="stat-card stat-teal">
+                    <div className="stat-top">
+                      <span>Active staff</span>
+                      <span className="stat-icon">●</span>
+                    </div>
+                    <strong>
+                      {adminLoading && !adminData
+                        ? "—"
+                        : adminData?.active_staff ?? 0}
+                    </strong>
+                    <small>Accounts with access</small>
+                  </div>
+
+                  <div className="stat-card stat-red">
+                    <div className="stat-top">
+                      <span>Inactive staff</span>
+                      <span className="stat-icon">⊘</span>
+                    </div>
+                    <strong>
+                      {adminLoading && !adminData
+                        ? "—"
+                        : adminData?.inactive_staff ?? 0}
+                    </strong>
+                    <small>Deactivated accounts</small>
+                  </div>
                 </div>
 
                 <div className="table-card">
                   <div className="admin-heading">
-                    <div><h2>Recent attendance</h2><p className="muted">Latest records returned by the dashboard API.</p></div>
-                    <button className="outline-button" type="button" onClick={() => { setAdminSection("history"); void loadAttendanceHistory(accessToken); }}>View all records →</button>
+                    <div>
+                      <h2>Recent attendance</h2>
+                      <p className="muted">
+                        Latest records returned by the dashboard API.
+                      </p>
+                    </div>
+                    <button
+                      className="outline-button"
+                      type="button"
+                      onClick={() => {
+                        setAdminSection("history");
+                        void loadAttendanceHistory(accessToken);
+                      }}
+                    >
+                      View all records →
+                    </button>
                   </div>
+
                   <div className="table-scroll">
                     <table>
-                      <thead><tr><th>Staff ID</th><th>Check-in</th><th>Check-out</th><th>Status</th></tr></thead>
+                      <thead>
+                        <tr>
+                          <th>Staff ID</th>
+                          <th>Check-in</th>
+                          <th>Check-out</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
                       <tbody>
                         {!adminData?.recent_attendance?.length ? (
-                          <tr><td colSpan={4}>{adminLoading ? "Loading recent attendance..." : "No recent attendance records."}</td></tr>
-                        ) : adminData.recent_attendance.map((record) => (
-                          <tr key={record.id}>
-                            <td>{record.staff_id}</td><td>{formatDateTime(record.check_in)}</td><td>{formatDateTime(record.check_out)}</td>
-                            <td><span className={`badge ${record.check_out ? "verified" : "gps-only"}`}>{record.check_out ? "Completed" : "Checked in"}</span></td>
+                          <tr>
+                            <td colSpan={4}>
+                              {adminLoading
+                                ? "Loading recent attendance..."
+                                : "No recent attendance records."}
+                            </td>
                           </tr>
-                        ))}
+                        ) : (
+                          adminData.recent_attendance.map((record) => (
+                            <tr key={record.id}>
+                              <td>{record.staff_id}</td>
+                              <td>{formatDateTime(record.check_in)}</td>
+                              <td>{formatDateTime(record.check_out)}</td>
+                              <td>
+                                <span
+                                  className={`badge ${
+                                    record.check_out
+                                      ? "verified"
+                                      : "gps-only"
+                                  }`}
+                                >
+                                  {record.check_out
+                                    ? "Completed"
+                                    : "Checked in"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -1528,44 +1764,122 @@ function App() {
                   <div>
                     <span className="eyebrow">ACCOUNT MANAGEMENT</span>
                     <h2>Manage staff accounts</h2>
-                    <p className="muted">Create accounts, reset PINs, and control account access.</p>
+                    <p className="muted">
+                      Create accounts, reset PINs, and control account access.
+                    </p>
                   </div>
-                  <button className="outline-button" type="button" disabled={staffLoading || staffBusy} onClick={() => void loadStaff(accessToken)}>
+                  <button
+                    className="outline-button"
+                    type="button"
+                    disabled={staffLoading || staffBusy}
+                    onClick={() => void loadStaff(accessToken)}
+                  >
                     {staffLoading ? "Loading..." : "Refresh staff"}
                   </button>
                 </div>
 
-                {staffError && <p className="error-message" role="alert">{staffError}</p>}
-                {staffMessage && <p className="success-message" role="status">{staffMessage}</p>}
+                {staffError && (
+                  <p className="error-message" role="alert">{staffError}</p>
+                )}
+                {staffMessage && (
+                  <p className="success-message" role="status">
+                    {staffMessage}
+                  </p>
+                )}
 
                 <div className="staff-forms-grid">
                   <form className="staff-form" onSubmit={handleCreateStaff}>
                     <h3>Add staff account</h3>
-                    <p className="muted">Create a new staff login with a unique ID.</p>
+                    <p className="muted">
+                      Create a new staff login with a unique ID.
+                    </p>
                     <label htmlFor="newStaffId">New Staff ID</label>
-                    <input id="newStaffId" value={newStaffId} onChange={(event) => setNewStaffId(event.target.value)} placeholder="e.g. STF002" minLength={3} maxLength={30} required />
+                    <input
+                      id="newStaffId"
+                      value={newStaffId}
+                      onChange={(event) => setNewStaffId(event.target.value)}
+                      placeholder="e.g. STF002"
+                      minLength={3}
+                      maxLength={30}
+                      required
+                    />
                     <label htmlFor="newStaffPin">Initial PIN</label>
-                    <input id="newStaffPin" type="password" inputMode="numeric" value={newStaffPin} onChange={(event) => setNewStaffPin(event.target.value)} placeholder="4–12 digit PIN" minLength={4} maxLength={12} pattern="[0-9]{4,12}" autoComplete="new-password" required />
-                    <button className="primary-button" type="submit" disabled={staffBusy}>{staffBusy ? "Please wait..." : "Create account"}</button>
+                    <input
+                      id="newStaffPin"
+                      type="password"
+                      inputMode="numeric"
+                      value={newStaffPin}
+                      onChange={(event) => setNewStaffPin(event.target.value)}
+                      placeholder="4–12 digit PIN"
+                      minLength={4}
+                      maxLength={12}
+                      pattern="[0-9]{4,12}"
+                      autoComplete="new-password"
+                      required
+                    />
+                    <button
+                      className="primary-button"
+                      type="submit"
+                      disabled={staffBusy}
+                    >
+                      {staffBusy ? "Please wait..." : "Create account"}
+                    </button>
                   </form>
 
                   <form className="staff-form" onSubmit={handleResetPin}>
                     <h3>Reset staff PIN</h3>
-                    <p className="muted">Set a new PIN for an existing account.</p>
+                    <p className="muted">
+                      Set a new PIN for an existing account.
+                    </p>
                     <label htmlFor="resetStaffId">Staff account</label>
-                    <select id="resetStaffId" value={resetStaffId} onChange={(event) => setResetStaffId(event.target.value)} required>
+                    <select
+                      id="resetStaffId"
+                      value={resetStaffId}
+                      onChange={(event) => setResetStaffId(event.target.value)}
+                      required
+                    >
                       <option value="">Select a staff account</option>
-                      {staffList.map((staff) => <option key={staff.staff_id} value={staff.staff_id}>{staff.staff_id}{staff.is_active ? "" : " (Inactive)"}</option>)}
+                      {staffList.map((staff) => (
+                        <option key={staff.staff_id} value={staff.staff_id}>
+                          {staff.staff_id}
+                          {staff.is_active ? "" : " (Inactive)"}
+                        </option>
+                      ))}
                     </select>
                     <label htmlFor="resetPin">New PIN</label>
-                    <input id="resetPin" type="password" inputMode="numeric" value={resetPin} onChange={(event) => setResetPin(event.target.value)} placeholder="4–12 digit PIN" minLength={4} maxLength={12} pattern="[0-9]{4,12}" autoComplete="new-password" required />
-                    <button className="primary-button" type="submit" disabled={staffBusy}>{staffBusy ? "Please wait..." : "Reset PIN"}</button>
+                    <input
+                      id="resetPin"
+                      type="password"
+                      inputMode="numeric"
+                      value={resetPin}
+                      onChange={(event) => setResetPin(event.target.value)}
+                      placeholder="4–12 digit PIN"
+                      minLength={4}
+                      maxLength={12}
+                      pattern="[0-9]{4,12}"
+                      autoComplete="new-password"
+                      required
+                    />
+                    <button
+                      className="primary-button"
+                      type="submit"
+                      disabled={staffBusy}
+                    >
+                      {staffBusy ? "Please wait..." : "Reset PIN"}
+                    </button>
                   </form>
                 </div>
 
                 <div className="section-heading staff-list-heading">
-                  <div><h2>Registered staff</h2><p>Manage account status and enroll staff face profiles.</p></div>
-                  <span className="date-chip">{staffList.length} accounts</span>
+                  <div>
+                    <h2>Registered staff</h2>
+                    <p>
+                      Manage account status and enroll staff face profiles.
+                    </p>
+                  </div>
+                  <span className="date-chip">
+                    {staffList.length} accounts
+                  </span>
                 </div>
 
                 <div className="table-scroll">
@@ -1581,31 +1895,52 @@ function App() {
                     </thead>
                     <tbody>
                       {staffLoading && staffList.length === 0 ? (
-                        <tr><td colSpan={5}>Loading staff accounts...</td></tr>
+                        <tr>
+                          <td colSpan={5}>Loading staff accounts...</td>
+                        </tr>
                       ) : staffList.length === 0 ? (
-                        <tr><td colSpan={5}>No staff accounts found.</td></tr>
+                        <tr>
+                          <td colSpan={5}>No staff accounts found.</td>
+                        </tr>
                       ) : (
                         staffList.map((staff) => (
                           <tr key={staff.staff_id}>
                             <td>{staff.staff_id}</td>
                             <td>
-                              <span className={`badge ${staff.is_active ? "verified" : "gps-only"}`}>
+                              <span
+                                className={`badge ${
+                                  staff.is_active ? "verified" : "gps-only"
+                                }`}
+                              >
                                 {staff.is_active ? "Active" : "Inactive"}
                               </span>
                             </td>
-                            <td>{staff.created_at ? formatDateTime(staff.created_at) : "—"}</td>
+                            <td>
+                              {staff.created_at
+                                ? formatDateTime(staff.created_at)
+                                : "—"}
+                            </td>
                             <td>
                               <button
                                 className="primary-button"
                                 type="button"
-                                disabled={staffBusy || !staff.is_active || !!enrollingStaffId}
+                                disabled={
+                                  staffBusy ||
+                                  !staff.is_active ||
+                                  !!enrollingStaffId
+                                }
                                 onClick={() => openFaceEnrollment(staff)}
                               >
                                 Enroll face
                               </button>
                             </td>
                             <td>
-                              <button className="outline-button" type="button" disabled={staffBusy} onClick={() => void handleToggleStaff(staff)}>
+                              <button
+                                className="outline-button"
+                                type="button"
+                                disabled={staffBusy}
+                                onClick={() => void handleToggleStaff(staff)}
+                              >
                                 {staff.is_active ? "Deactivate" : "Activate"}
                               </button>
                             </td>
@@ -1624,65 +1959,153 @@ function App() {
                   <div>
                     <span className="eyebrow">ATTENDANCE RECORDS</span>
                     <h2>Attendance history</h2>
-                    <p className="muted">Search records by date, staff ID, and status.</p>
+                    <p className="muted">
+                      Search records by date, staff ID, and status.
+                    </p>
                   </div>
                 </div>
 
-                <form className="history-filters" onSubmit={(event) => { event.preventDefault(); void loadAttendanceHistory(accessToken); }}>
+                <form
+                  className="history-filters"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void loadAttendanceHistory(accessToken);
+                  }}
+                >
                   <div className="staff-form">
                     <label htmlFor="historyDate">Attendance date</label>
-                    <input id="historyDate" type="date" value={historyDate} onChange={(event) => setHistoryDate(event.target.value)} required />
+                    <input
+                      id="historyDate"
+                      type="date"
+                      value={historyDate}
+                      onChange={(event) => setHistoryDate(event.target.value)}
+                      required
+                    />
                   </div>
+
                   <div className="staff-form">
-                    <label htmlFor="historyStaffId">Staff ID (optional)</label>
-                    <input id="historyStaffId" value={historyStaffId} onChange={(event) => setHistoryStaffId(event.target.value)} placeholder="e.g. STF001" />
+                    <label htmlFor="historyStaffId">
+                      Staff ID (optional)
+                    </label>
+                    <input
+                      id="historyStaffId"
+                      value={historyStaffId}
+                      onChange={(event) =>
+                        setHistoryStaffId(event.target.value)
+                      }
+                      placeholder="e.g. STF001"
+                    />
                   </div>
+
                   <div className="staff-form">
                     <label htmlFor="historyStatus">Status</label>
-                    <select id="historyStatus" value={historyStatus} onChange={(event) => setHistoryStatus(event.target.value as HistoryStatus)}>
+                    <select
+                      id="historyStatus"
+                      value={historyStatus}
+                      onChange={(event) =>
+                        setHistoryStatus(
+                          event.target.value as HistoryStatus
+                        )
+                      }
+                    >
                       <option value="all">All statuses</option>
                       <option value="present">Present</option>
                       <option value="absent">Absent</option>
                       <option value="checked_in">Checked in</option>
                     </select>
                   </div>
+
                   <div className="staff-form filter-action">
                     <label>Search records</label>
-                    <button className="primary-button" type="submit" disabled={historyLoading || !historyDate}>
+                    <button
+                      className="primary-button"
+                      type="submit"
+                      disabled={historyLoading || !historyDate}
+                    >
                       {historyLoading ? "Loading..." : "Apply filters"}
                     </button>
                   </div>
                 </form>
 
-                {historyError && <p className="error-message" role="alert">{historyError}</p>}
-                {historyData && <div className="results-summary"><strong>{historyData.total} records</strong><span>Attendance for {historyData.date}</span></div>}
+                {historyError && (
+                  <p className="error-message" role="alert">{historyError}</p>
+                )}
+
+                {historyData && (
+                  <div className="results-summary">
+                    <strong>{historyData.total} records</strong>
+                    <span>Attendance for {historyData.date}</span>
+                  </div>
+                )}
 
                 <div className="table-scroll">
                   <table>
-                    <thead><tr><th>Staff ID</th><th>Check-in</th><th>Check-out</th><th>Status</th></tr></thead>
+                    <thead>
+                      <tr>
+                        <th>Staff ID</th>
+                        <th>Check-in</th>
+                        <th>Check-out</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
                     <tbody>
                       {historyLoading ? (
-                        <tr><td colSpan={4}>Loading attendance history...</td></tr>
+                        <tr>
+                          <td colSpan={4}>Loading attendance history...</td>
+                        </tr>
                       ) : !historyData ? (
-                        <tr><td colSpan={4}>{historyError ? "Could not load attendance records." : "No results loaded yet."}</td></tr>
-                      ) : historyData.records.length === 0 ? (
-                        <tr><td colSpan={4}>No records match the selected filters.</td></tr>
-                      ) : historyData.records.map((record) => (
-                        <tr key={record.staff_id}>
-                          <td>{record.staff_id}</td><td>{formatDateTime(record.check_in)}</td><td>{formatDateTime(record.check_out)}</td>
-                          <td>
-                            <span className={`badge ${record.status === "present" ? "verified" : record.status === "checked_in" ? "gps-only" : ""}`}>
-                              {record.status === "checked_in" ? "Checked in" : record.status === "present" ? "Present" : "Absent"}
-                            </span>
+                        <tr>
+                          <td colSpan={4}>
+                            {historyError
+                              ? "Could not load attendance records."
+                              : "No results loaded yet."}
                           </td>
                         </tr>
-                      ))}
+                      ) : historyData.records.length === 0 ? (
+                        <tr>
+                          <td colSpan={4}>
+                            No records match the selected filters.
+                          </td>
+                        </tr>
+                      ) : (
+                        historyData.records.map((record) => (
+                          <tr key={record.staff_id}>
+                            <td>{record.staff_id}</td>
+                            <td>{formatDateTime(record.check_in)}</td>
+                            <td>{formatDateTime(record.check_out)}</td>
+                            <td>
+                              <span
+                                className={`badge ${
+                                  record.status === "present"
+                                    ? "verified"
+                                    : record.status === "checked_in"
+                                      ? "gps-only"
+                                      : ""
+                                }`}
+                              >
+                                {record.status === "checked_in"
+                                  ? "Checked in"
+                                  : record.status === "present"
+                                    ? "Present"
+                                    : "Absent"}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
 
                 <div className="history-footer">
-                  <button className="outline-button" type="button" disabled={historyLoading} onClick={() => void loadAttendanceHistory(accessToken)}>
+                  <button
+                    className="outline-button"
+                    type="button"
+                    disabled={historyLoading}
+                    onClick={() =>
+                      void loadAttendanceHistory(accessToken)
+                    }
+                  >
                     ↻ Refresh results
                   </button>
                 </div>
@@ -1697,12 +2120,14 @@ function App() {
         </div>
       )}
 
-      {/* Face enrollment dialog */}
       {enrollingStaffId && screen === "admin" && (
         <div
           className="confirm-overlay"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !enrollBusy) {
+            if (
+              event.target === event.currentTarget &&
+              !enrollBusy
+            ) {
               closeFaceEnrollment();
             }
           }}
@@ -1717,25 +2142,54 @@ function App() {
             <span className="eyebrow">STAFF FACE ENROLLMENT</span>
             <h2 id="enroll-title">Enroll {enrollingStaffId}</h2>
             <p id="enroll-description">
-              Make sure the correct staff member is in view. Their face should be clearly visible, well lit, and facing the camera. Only enroll a person with their knowledge and consent.
+              Make sure the correct staff member is in view. Their face
+              should be clearly visible, well lit, and facing the camera.
+              Only enroll a person with their knowledge and consent.
             </p>
 
-            <div style={{ width: "100%", overflow: "hidden", borderRadius: "12px", background: "#111827", margin: "16px 0" }}>
+            <div
+              style={{
+                width: "100%",
+                overflow: "hidden",
+                borderRadius: "12px",
+                background: "#111827",
+                margin: "16px 0",
+              }}
+            >
               <video
                 ref={enrollVideoRef}
                 autoPlay
                 playsInline
                 muted
                 aria-label="Face enrollment camera preview"
-                style={{ display: "block", width: "100%", maxHeight: "320px", minHeight: "180px", objectFit: "cover" }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  maxHeight: "320px",
+                  minHeight: "180px",
+                  objectFit: "cover",
+                }}
               />
             </div>
 
-            {enrollCameraError && <p className="error-message" role="alert">{enrollCameraError}</p>}
-            {enrollMessage && <p className="success-message" role="status">{enrollMessage}</p>}
+            {enrollCameraError && (
+              <p className="error-message" role="alert">
+                {enrollCameraError}
+              </p>
+            )}
+            {enrollMessage && (
+              <p className="success-message" role="status">
+                {enrollMessage}
+              </p>
+            )}
 
             <div className="confirm-actions">
-              <button type="button" className="outline-button" disabled={enrollBusy} onClick={closeFaceEnrollment}>
+              <button
+                type="button"
+                className="outline-button"
+                disabled={enrollBusy}
+                onClick={closeFaceEnrollment}
+              >
                 Cancel
               </button>
               <button
@@ -1755,7 +2209,10 @@ function App() {
         <div
           className="confirm-overlay"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !attendanceBusy) {
+            if (
+              event.target === event.currentTarget &&
+              !attendanceBusy
+            ) {
               setPendingAttendanceAction(null);
             }
           }}
@@ -1767,28 +2224,49 @@ function App() {
             aria-labelledby="confirm-title"
             aria-describedby="confirm-description"
           >
-            <div className={`confirm-icon ${pendingAttendanceAction === "check-in" ? "confirm-icon-in" : "confirm-icon-out"}`} aria-hidden="true">
+            <div
+              className={`confirm-icon ${
+                pendingAttendanceAction === "check-in"
+                  ? "confirm-icon-in"
+                  : "confirm-icon-out"
+              }`}
+              aria-hidden="true"
+            >
               {pendingAttendanceAction === "check-in" ? "↗" : "↙"}
             </div>
+
             <span className="eyebrow">ATTENDANCE CONFIRMATION</span>
             <h2 id="confirm-title">
-              Confirm your {pendingAttendanceAction === "check-in" ? "check-in" : "check-out"}?
+              Confirm your{" "}
+              {pendingAttendanceAction === "check-in"
+                ? "check-in"
+                : "check-out"}?
             </h2>
             <p id="confirm-description">
               {pendingAttendanceAction === "check-in"
                 ? "Your face will be verified before marking today's attendance."
                 : "Your face will be verified before ending your current attendance session."}
             </p>
+
             <div className="confirm-notice">
               <span aria-hidden="true">ⓘ</span>
               <p>
-                The live camera image and GPS location will be checked. Attendance is recorded only if face verification, campus location, and GPS accuracy requirements pass.
+                The live camera image and GPS location will be checked.
+                Attendance is recorded only if face verification, campus
+                location, and GPS accuracy requirements pass.
               </p>
             </div>
+
             <div className="confirm-actions">
-              <button type="button" className="outline-button" disabled={attendanceBusy} onClick={() => setPendingAttendanceAction(null)}>
+              <button
+                type="button"
+                className="outline-button"
+                disabled={attendanceBusy}
+                onClick={() => setPendingAttendanceAction(null)}
+              >
                 Cancel
               </button>
+
               <button
                 type="button"
                 className="primary-button"
@@ -1796,11 +2274,18 @@ function App() {
                 onClick={() => {
                   const action = pendingAttendanceAction;
                   if (!action || attendanceBusy) return;
+
                   setPendingAttendanceAction(null);
                   void handleAttendance(action);
                 }}
               >
-                {attendanceBusy ? "Please wait..." : `Yes, ${pendingAttendanceAction === "check-in" ? "check in" : "check out"}`}
+                {attendanceBusy
+                  ? "Please wait..."
+                  : `Yes, ${
+                      pendingAttendanceAction === "check-in"
+                        ? "check in"
+                        : "check out"
+                    }`}
               </button>
             </div>
           </section>
