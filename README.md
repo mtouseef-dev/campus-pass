@@ -1,8 +1,21 @@
-# CampusPass — Smart Campus Attendance System
+<div align="center">
 
-CampusPass is a web-based staff attendance management system built with **React + Vite** on the frontend and **FastAPI** on the backend. It combines PIN-based authentication, face verification, GPS-based campus geofencing, and an admin dashboard for managing staff and reviewing attendance.
+# CampusPass
 
-> **Project status:** Local development setup. Update this README if your actual `.env` names, database schema, or installed dependencies differ from the examples below.
+### Smart Campus Attendance System
+
+Staff attendance with PIN authentication, face verification, and campus geofencing.
+
+[![React](https://img.shields.io/badge/Frontend-React-61DAFB?logo=react&logoColor=white)](https://react.dev/)
+[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Supabase](https://img.shields.io/badge/Database-Supabase-3FCF8E?logo=supabase&logoColor=white)](https://supabase.com/)
+
+</div>
+
+CampusPass is a web-based staff attendance management system built with **React + Vite** on the frontend and **FastAPI** on the backend. Staff can check in and out after PIN sign-in, face verification, and a GPS check against the campus geofence. Administrators can manage staff accounts and review attendance.
+
+> [!NOTE]
+> This README describes the local development setup. Values shown for environment variables are examples; confirm the exact names, database schema, and dependencies against the backend before running the project.
 
 ## Contents
 
@@ -21,6 +34,7 @@ CampusPass is a web-based staff attendance management system built with **React 
 - [Troubleshooting](#troubleshooting)
 - [Development notes](#development-notes)
 - [Future improvements](#future-improvements)
+- [License](#license)
 
 ## Overview
 
@@ -71,24 +85,17 @@ Administrators can view an overview, manage staff accounts, enroll a face profil
 
 ## Project structure
 
-The main files and folders used in the current development setup are:
+The repository is organized into the following areas:
 
 ```text
-CampusPass/
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx        # Main React application and screens
-│   │   ├── App.css        # Application styles
-│   │   └── main.tsx       # React entry point
-│   ├── package.json       # Frontend dependencies and scripts
-│   └── ...                # Vite and TypeScript configuration
-├── main.py                # FastAPI backend and API routes
-├── .env                   # Local secrets/configuration (do not commit)
-├── .gitignore
+CampusPass-IGNITE/
+├── backend/     # FastAPI backend
+├── frontend/    # React + Vite frontend
+├── Docs/        # Project documentation
 └── README.md
 ```
 
-Your repository may contain additional backend modules, migrations, or configuration files; keep those in place. Do not commit `.env`, service-role keys, JWT secrets, or other credentials.
+Backend modules, migrations, and configuration may be added within their respective folders. Do not commit `.env` files, service-role keys, JWT secrets, or other credentials.
 
 ## Requirements
 
@@ -346,5 +353,3 @@ Read the response body shown in the frontend or backend logs. It may explain tha
 ## License
 
 No license has been specified yet. Add a `LICENSE` file and update this section before publishing or distributing the project.
-#   C a m p u s P a s s - I G N I T E  
- 
