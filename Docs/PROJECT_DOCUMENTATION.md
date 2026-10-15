@@ -419,7 +419,7 @@ Then open:
 
 - Backend runs on port 8100
 - Frontend runs on port 5180
-- Frontend base URL is currently hardcoded to http://127.0.0.1:8100
+- Frontend defaults to https://campus-pass-lf2a.onrender.com; set VITE_API_URL=http://127.0.0.1:8100 for local development
 - CORS is configured for localhost:5180 and 127.0.0.1:5180
 - Browser camera and GPS permissions are required
 - Localhost behaves as a secure context in browsers, so it works for local testing
@@ -481,5 +481,4 @@ It is a strong MVP and a good foundation for a real attendance system, but it ne
 - [frontend/src/App.tsx](./frontend/src/App.tsx)
 - [frontend/src/App.css](./frontend/src/App.css)
 - [backend/.env](./backend/.env)
-
 

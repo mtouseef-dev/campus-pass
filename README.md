@@ -209,7 +209,7 @@ Open the Vite URL shown in the terminal, normally:
 http://127.0.0.1:5180
 ```
 
-The frontend's API base URL is currently configured as `http://127.0.0.1:8100`. If you change the backend host or port, update the corresponding API URL in the frontend and ensure backend CORS allows the frontend origin.
+The frontend uses `https://campus-pass-lf2a.onrender.com` as its default API base URL. To use a local backend, set `VITE_API_URL=http://127.0.0.1:8100` in the frontend environment. Ensure backend CORS allows the frontend origin.
 
 ## How to use
 
@@ -309,7 +309,7 @@ Read the response body shown in the frontend or backend logs. It may explain tha
 ### Frontend cannot reach the backend
 
 - Confirm Uvicorn is running on port `8100`.
-- Check that the API URL in the frontend is `http://127.0.0.1:8100`.
+- Check that `VITE_API_URL` points to the intended backend, or that the default API URL `https://campus-pass-lf2a.onrender.com` is reachable.
 - Ensure CORS allows the frontend origin, normally `http://127.0.0.1:5180`.
 - Check terminal logs and browser DevTools Network/Console tabs.
 
