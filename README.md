@@ -17,8 +17,30 @@ CampusPass is a web-based staff attendance management system built with **React 
 > [!NOTE]
 > This README describes the local development setup. Values shown for environment variables are examples; confirm the exact names, database schema, and dependencies against the backend before running the project.
 
+## Mobile preview
+
+Explore the staff-facing mobile interface: PIN sign-in, attendance controls, and attendance history.
+
+<table>
+  <tr>
+    <th>Staff sign-in</th>
+    <th>Attendance &amp; history</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/staff-login.jpg" alt="CampusPass mobile sign-in screen with empty Staff ID and PIN fields" width="300"></td>
+    <td align="center"><img src="docs/screenshots/attendance-history.jpg" alt="CampusPass face-verification guidance, check-in and check-out buttons, and attendance history" width="300"></td>
+  </tr>
+  <tr>
+    <td>Sign in with a registered staff account.</td>
+    <td>View camera guidance, attendance controls, and previous check-in and check-out times.</td>
+  </tr>
+</table>
+
+Screenshots captured in October 2026 illustrate the interface. They do not validate face-matching accuracy, liveness detection, or current deployment availability.
+
 ## Contents
 
+- [Mobile preview](#mobile-preview)
 - [Overview](#overview)
 - [Features](#features)
 - [Technology stack](#technology-stack)
